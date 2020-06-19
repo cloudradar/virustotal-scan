@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/williballenthin/govt"
@@ -12,10 +13,15 @@ import (
 
 var apikey string
 var file string
+var ignoreEngines string
+
+var verbose bool
 
 func init() {
 	flag.StringVar(&apikey, "apikey", os.Getenv("VIRUSTOTAL_TOKEN"), "VirusTotal API key.")
 	flag.StringVar(&file, "file", "", "File to scan.")
+	flag.StringVar(&ignoreEngines, "ignore", "", "Comma-separated list of A/V engines to ignore")
+	flag.BoolVar(&verbose, "verbose", false, "Be verbose")
 }
 
 func main() {
@@ -50,11 +56,15 @@ func main() {
 			continue
 		}
 
-		time.Sleep(20 * time.Second)
 		if report.ResponseCode == 1 {
 			fmt.Println("Report is done")
 			break
 		}
+		if verbose {
+			fmt.Printf("Partial report result: %+v\n", report)
+		}
+
+		time.Sleep(20 * time.Second)
 	}
 
 	if report == nil {
@@ -69,14 +79,11 @@ func main() {
 
 	// count positive matches, filter out some AV engines
 	for s, o := range report.Scans {
-		switch s {
-		case "Cylance", "Jiangmin", "Ikarus", "MaxSecure":
-			positiveFiltered++
-			filteredResults = append(filteredResults, result{engine: s, result: o.Result})
-			break
-
-		default:
-			if o.Detected {
+		for _, ignored := range strings.Split(ignoreEngines, ",") {
+			if strings.ToLower(s) == strings.ToLower(ignored) {
+				positiveFiltered++
+				filteredResults = append(filteredResults, result{engine: s, result: o.Result})
+			} else if o.Detected {
 				positives++
 				positiveResults = append(positiveResults, result{engine: s, result: o.Result})
 			}
