@@ -48,23 +48,25 @@ func main() {
 
 	// wait for scan report to be completed
 	var report *govt.FileReport
-	for i := 1; i <= 30; i++ {
-		fmt.Printf("Checking scan report %d/20\n", i)
+	maxReportChecks := 100
+	for i := 1; i <= maxReportChecks; i++ {
+		fmt.Printf("Checking scan report %d/%d\n", i, maxReportChecks)
 		report, err = c.GetFileReport(r.ScanId)
 		if err != nil {
 			log.Println("GetFileReport error:", err)
 			continue
 		}
 
-		if report.ResponseCode == 1 {
-			fmt.Println("Report is done")
-			break
-		}
 		if verbose {
 			fmt.Printf("Partial report result: %+v\n", report)
 		}
 
-		time.Sleep(20 * time.Second)
+		if report.ResponseCode == 1 {
+			fmt.Println("Report is done")
+			break
+		}
+
+		time.Sleep(30 * time.Second)
 	}
 
 	if report == nil {
@@ -77,16 +79,27 @@ func main() {
 	positiveResults := []result{}
 	filteredResults := []result{}
 
+	ignoreEngines := strings.Split(ignoreEngines, ",")
+
 	// count positive matches, filter out some AV engines
 	for s, o := range report.Scans {
-		for _, ignored := range strings.Split(ignoreEngines, ",") {
+		found := false
+		for _, ignored := range ignoreEngines {
 			if strings.ToLower(s) == strings.ToLower(ignored) {
+				if verbose {
+					fmt.Println("IGNORED MATCH", ignored)
+				}
 				positiveFiltered++
 				filteredResults = append(filteredResults, result{engine: s, result: o.Result})
-			} else if o.Detected {
-				positives++
-				positiveResults = append(positiveResults, result{engine: s, result: o.Result})
+				found = true
 			}
+		}
+		if !found && o.Detected {
+			if verbose {
+				fmt.Println("POSITIVE DETECTION", s)
+			}
+			positives++
+			positiveResults = append(positiveResults, result{engine: s, result: o.Result})
 		}
 	}
 
